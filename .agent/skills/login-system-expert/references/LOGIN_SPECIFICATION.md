@@ -609,13 +609,14 @@ DATABASE_URL=postgresql://user:password@localhost:5432/dbname
 npm run dev
 ```
 
-## 7. 安全注意事项
+## 7. 安全与跨域避坑指南（关键）
 
 1. **JWT_SECRET**：必须在生产环境中设置为强密钥，并定期更换
 2. **密码存储**：使用 bcrypt 对密码进行加密存储，禁止明文存储密码
-3. **Cookie 安全**：设置 httpOnly 和 sameSite 属性，防止 XSS 和 CSRF 攻击
-4. **SSO 验证**：确保 SSO token 验证的安全性，防止伪造
-5. **权限控制**：根据用户角色进行权限控制，防止越权访问
+3. **Cookie 安全**：设置 httpOnly 和 sameSite 属性。跨域部署时，**必须确保主应用域名与 SSO 服务提供商挂载在同一顶级域名下（或配置正确的子域名映射）**，否则前端绝对无法读取 SSO 颁发的鉴权 Cookie。
+4. **拒绝对 SSO Token 接口进行本地 Mock（防查库灾难）**：在前端代码 `login.vue / login.html` 发生无法获取 token 的情况下，应直接向用户报错。**绝对禁止**在逻辑中加入“如果拿不到线上 Token 就读取本地 `BBS_Data.json` 获取定值 Token”的兜底代码。这会导致所有尝试登录的用户均带着同一个测试用 Token 同步给后端，最终造成数据库里出现所有人覆盖注册到同一条用户数据（唯一 ID 冲突）的严重生产事故。
+5. **SSO 验证后端调用规范**：后端代理验证 `bbsToken`，调用第三方如 `https://bbs.cgpool.com/...` 时，在发起网络请求（`fetch` 或 `requests.post`）时，**必须使用 `application/x-www-form-urlencoded` 表单格式 (如 Python 的 `data={'cgsaas_token': token}` 或 JS 的 `new URLSearchParams()`) 传递参数**，不能使用 `application/json` (如 `json={...}`)，否则将遭遇第三方服务器防跨域或严格参数解析引发的 HTTP 401 Unauthorized 错误。
+6. **重定向拦截器参数保留**：任何全局未登录拦截器（如 Flask `@login_required` 或 Nuxt Middleware）在遇到含 `?code=xxxx` 的 SSO 回跳时，在强行执行 Redirect 转往 `login` 页时，**必须保留并透传原 URL 上的所有 Query String** 避免授权码在跳转路由间丢失。
 
 ## 8. 扩展建议
 
